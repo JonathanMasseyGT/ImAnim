@@ -9116,6 +9116,7 @@ static void ShowUsecase_WordCloud()
 
 		ImU32 word_col = hovered ? IM_COL32(100, 200, 255, 255) : IM_COL32(200, 200, 210, 255);
 
+		word_scale = fmax(0.001f, word_scale);
 		ImGui::SetWindowFontScale(word_scale);
 		dl->AddText(word_pos, word_col, words[i]);
 		ImGui::SetWindowFontScale(1.0f);
