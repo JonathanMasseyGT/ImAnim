@@ -3,6 +3,9 @@
 // License: MIT
 
 #include "im_anim.h"
+
+#include <algorithm>
+
 #include "imgui.h"
 #include "imgui_internal.h"
 #include <stdio.h>
@@ -37,6 +40,12 @@ ImU32 const AgedCopper = IM_COL32( 204, 120, 88, 255 );
 // Internal: parameterized easing LUT cache (ImPool)
 // ----------------------------------------------------
 namespace iam_detail {
+
+unsigned g_last_seen_frame = 0;
+unsigned last_seen(unsigned frame) {
+	g_last_seen_frame = frame;
+	return g_last_seen_frame;
+}
 
 // ----------------------------------------------------
 // Easing constants - named values for clarity
@@ -536,6 +545,9 @@ template<> struct chan_traits<int> {
 	}
 };
 
+// Global frame counter for oscillators and procedural animations
+static unsigned g_frame = 0;
+
 // ----------------------------------------------------
 // Base channel template - shared logic for all channel types
 // ----------------------------------------------------
@@ -591,6 +603,7 @@ struct base_chan {
 		if (t >= 1.f) { current = target; sleeping = 1; return current; }
 		float k = eval(ez, t);
 		current = chan_traits<T>::lerp(start, target, k);
+		last_seen_frame = last_seen(iam_detail::g_frame);
 		return current;
 	}
 
@@ -666,7 +679,7 @@ struct pool_t {
 	ImPool<T> pool;
 	unsigned frame = 0;
 	void begin() { ++frame; }
-	T* get(ImGuiID key) { T* c = pool.GetOrAddByKey(key); c->last_seen_frame = frame; return c; }
+	T* get(ImGuiID key) { T* c = pool.GetOrAddByKey(key); c->last_seen_frame = last_seen(frame); return c; }
 	T* try_get(ImGuiID key) { return pool.GetByKey(key); }  // Returns nullptr if not found
 	bool exists(ImGuiID key) { return pool.GetByKey(key) != nullptr; }
 	void gc(unsigned max_age) {
@@ -689,9 +702,6 @@ static pool_t<color_chan> g_color;
 
 // Global time scale for slow-motion / fast-forward
 static float g_time_scale = 1.0f;
-
-// Global frame counter for oscillators and procedural animations
-static unsigned g_frame = 0;
 
 // Lazy initialization - defer channel creation until animation is needed
 static bool g_lazy_init_enabled = true;
@@ -959,9 +969,9 @@ float iam_tween_float(ImGuiID id, ImGuiID channel_id, float target, float dur, i
 
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
 	                    (c->ez.p0!=ez.p0) || (c->ez.p1!=ez.p1) || (c->ez.p2!=ez.p2) || (c->ez.p3!=ez.p3) ||
-	                    (fabsf(c->target - target) > 1e-6f) || anim_complete;
+	                    (fabsf(c->target - target) > 1e-6f);
 	if (change) {
-		if (policy == iam_policy_queue && !anim_complete && !c->has_pending) {
+		if (policy == iam_policy_queue && !anim_complete) {
 			c->pending_target = target; c->has_pending = 1;
 		}
 		else if (policy == iam_policy_cut) {
@@ -1001,9 +1011,9 @@ ImVec2 iam_tween_vec2(ImGuiID id, ImGuiID channel_id, ImVec2 target, float dur, 
 
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
 	                    (c->ez.p0!=ez.p0) || (c->ez.p1!=ez.p1) || (c->ez.p2!=ez.p2) || (c->ez.p3!=ez.p3) ||
-	                    (fabsf(c->target.x - target.x) + fabsf(c->target.y - target.y) > 1e-6f) || anim_complete;
+	                    (fabsf(c->target.x - target.x) + fabsf(c->target.y - target.y) > 1e-6f);
 	if (change) {
-		if (policy == iam_policy_queue && !anim_complete && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
+		if (policy == iam_policy_queue && !anim_complete) { c->pending_target = target; c->has_pending = 1; }
 		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
 		else { c->evaluate(); c->set(target, dur, ez, policy); }
 	}
@@ -1036,9 +1046,9 @@ ImVec4 iam_tween_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, 
 
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
 	                    (c->ez.p0!=ez.p0) || (c->ez.p1!=ez.p1) || (c->ez.p2!=ez.p2) || (c->ez.p3!=ez.p3) ||
-	                    (fabsf(c->target.x-target.x)+fabsf(c->target.y-target.y)+fabsf(c->target.z-target.z)+fabsf(c->target.w-target.w) > 1e-6f) || anim_complete;
+	                    (fabsf(c->target.x-target.x)+fabsf(c->target.y-target.y)+fabsf(c->target.z-target.z)+fabsf(c->target.w-target.w) > 1e-6f);
 	if (change) {
-		if (policy == iam_policy_queue && !anim_complete && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
+		if (policy == iam_policy_queue && !anim_complete) { c->pending_target = target; c->has_pending = 1; }
 		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
 		else { c->evaluate(); c->set(target, dur, ez, policy); }
 	}
@@ -1069,9 +1079,9 @@ int iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_eas
 
 	bool const change = (c->policy!=policy) || (c->ez.type!=ez.type) ||
 	                    (c->ez.p0!=ez.p0) || (c->ez.p1!=ez.p1) || (c->ez.p2!=ez.p2) || (c->ez.p3!=ez.p3) ||
-	                    (c->target != target) || anim_complete;
+	                    (c->target != target);
 	if (change) {
-		if (policy == iam_policy_queue && !anim_complete && !c->has_pending) { c->pending_target = target; c->has_pending = 1; }
+		if (policy == iam_policy_queue && !anim_complete) { c->pending_target = target; c->has_pending = 1; }
 		else if (policy == iam_policy_cut) { c->current = c->start = c->target = target; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->sleeping = 1; }
 		else { c->evaluate(); c->set(target, dur, ez, policy); }
 	}
@@ -1102,7 +1112,7 @@ ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float
 
 	bool const change = (c->policy!=policy) || (c->space != color_space) || (c->ez.type!=ez.type) ||
 	                    (c->ez.p0!=ez.p0) || (c->ez.p1!=ez.p1) || (c->ez.p2!=ez.p2) || (c->ez.p3!=ez.p3) ||
-	                    (fabsf(c->target.x-target_srgb.x)+fabsf(c->target.y-target_srgb.y)+fabsf(c->target.z-target_srgb.z)+fabsf(c->target.w-target_srgb.w) > 1e-6f) || anim_complete;
+	                    (fabsf(c->target.x-target_srgb.x)+fabsf(c->target.y-target_srgb.y)+fabsf(c->target.z-target_srgb.z)+fabsf(c->target.w-target_srgb.w) > 1e-6f);
 	if (change) {
 		if (policy == iam_policy_cut) { c->current = c->start = c->target = target_srgb; c->dur = 1e-6f; c->ez = ez; c->policy = policy; c->space = color_space; c->sleeping = 1; }
 		else { c->evaluate(); c->set(target_srgb, dur, ez, policy, color_space); }
@@ -2985,6 +2995,7 @@ bool iam_instance::get_float(ImGuiID channel, float* out) const {
 		}
 	}
 
+	if(is_playing()) iam_detail::last_seen(iam_detail::g_frame);	//Clips count as last seen when the data is actually accessed.  TODO: need to clean up clips that are infinitely looping but unused.  Perhaps lazily update clips?
 	// Normal float channel
 	*out = inst->values_float.GetFloat(channel, 0.0f);
 	return true;
@@ -3023,6 +3034,7 @@ bool iam_instance::get_vec2(ImGuiID channel, ImVec2* out) const {
 	for (int i = 0; i < inst->values_vec2.Size; ++i) {
 		if (inst->values_vec2[i].ch == channel) {
 			*out = inst->values_vec2[i].v;
+			if(is_playing()) iam_detail::last_seen(iam_detail::g_frame);	//Clips count as last seen when the data is actually accessed.  TODO: need to clean up clips that are infinitely looping but unused.  Perhaps lazily update clips?
 			return true;
 		}
 	}
@@ -3066,6 +3078,7 @@ bool iam_instance::get_vec4(ImGuiID channel, ImVec4* out) const {
 	// Normal vec4 channel
 	for (int i = 0; i < inst->values_vec4.Size; ++i) {
 		if (inst->values_vec4[i].ch == channel) {
+			if(is_playing()) iam_detail::last_seen(iam_detail::g_frame);	//Clips count as last seen when the data is actually accessed.  TODO: need to clean up clips that are infinitely looping but unused.  Perhaps lazily update clips?
 			*out = inst->values_vec4[i].v;
 			return true;
 		}
@@ -3078,6 +3091,7 @@ bool iam_instance::get_int(ImGuiID channel, int* out) const {
 	iam_instance_data* inst = get_instance_data(m_inst_id);
 	if (!inst || !out) return false;
 	*out = inst->values_int.GetInt(channel, 0);
+	if(is_playing()) iam_detail::last_seen(iam_detail::g_frame);	//Clips count as last seen when the data is actually accessed.  TODO: need to clean up clips that are infinitely looping but unused.  Perhaps lazily update clips?
 	return true;
 }
 
@@ -3107,6 +3121,7 @@ bool iam_instance::get_color(ImGuiID channel, ImVec4* out, int color_space) cons
 							anchor.x * percent.z + px_bias.z,
 							anchor.y * percent.w + px_bias.w
 						);
+						if(is_playing()) iam_detail::last_seen(iam_detail::g_frame);	//Clips count as last seen when the data is actually accessed.  TODO: need to clean up clips that are infinitely looping but unused.  Perhaps lazily update clips?
 						return true;
 					}
 				}
@@ -3127,6 +3142,7 @@ bool iam_instance::get_color(ImGuiID channel, ImVec4* out, int color_space) cons
 			} else {
 				*out = inst->values_color[i].v;
 			}
+			if(is_playing()) iam_detail::last_seen(iam_detail::g_frame);	//Clips count as last seen when the data is actually accessed.  TODO: need to clean up clips that are infinitely looping but unused.  Perhaps lazily update clips?
 			return true;
 		}
 	}
@@ -3182,7 +3198,7 @@ void iam_clip_update(float dt) {
 				for (int tr = 0; tr < clip->iam_tracks.Size; ++tr) {
 					eval_iam_track(clip->iam_tracks[tr], 0.0f, inst);
 				}
-				inst->last_seen_frame = g_clip_sys.frame_counter;
+				inst->last_seen_frame = iam_detail::last_seen(g_clip_sys.frame_counter);
 				continue;
 			}
 			inst_dt = -inst->delay_left;
@@ -3276,7 +3292,7 @@ void iam_clip_update(float dt) {
 			for (int tr = 0; tr < clip->iam_tracks.Size; ++tr) {
 				eval_iam_track(clip->iam_tracks[tr], inst->time, inst);
 			}
-			inst->last_seen_frame = g_clip_sys.frame_counter;
+			inst->last_seen_frame = iam_detail::last_seen(g_clip_sys.frame_counter);
 			if (clip->cb_complete)
 				clip->cb_complete(inst->inst_id, clip->cb_complete_user);
 
@@ -3340,6 +3356,7 @@ void iam_clip_update(float dt) {
 		if (clip->cb_update)
 			clip->cb_update(inst->inst_id, clip->cb_update_user);
 
+		//TODO: This isn't accurate for "last seen" for looping anims.  They loop forever.
 		inst->last_seen_frame = g_clip_sys.frame_counter;
 	}
 }
@@ -3390,7 +3407,7 @@ iam_instance iam_play(ImGuiID clip_id, ImGuiID instance_id) {
 	inst->begin_called = false;  // Reset so on_begin will be called
 	inst->dir_sign = (clip->direction == iam_dir_reverse) ? -1 : 1;
 	inst->loops_left = clip->loop_count;
-	inst->last_seen_frame = g_clip_sys.frame_counter;
+	inst->last_seen_frame = iam_detail::last_seen(g_clip_sys.frame_counter);
 
 	// Initialize marker tracking
 	inst->prev_time = (inst->dir_sign > 0) ? 0.0f : clip->duration;
@@ -3896,6 +3913,7 @@ static float eval_wave(int wave_type, float t) {
 } // namespace iam_osc_detail
 
 float iam_oscillate(ImGuiID id, float amplitude, float frequency, int wave_type, float phase, float dt) {
+	iam_detail::last_seen(iam_detail::g_frame);
 	using namespace iam_osc_detail;
 	dt *= iam_detail::g_time_scale;
 	osc_state* s = get_osc(id);
@@ -3909,6 +3927,7 @@ float iam_oscillate(ImGuiID id, float amplitude, float frequency, int wave_type,
 }
 
 ImVec2 iam_oscillate_vec2(ImGuiID id, ImVec2 amplitude, ImVec2 frequency, int wave_type, ImVec2 phase, float dt) {
+	iam_detail::last_seen(iam_detail::g_frame);
 	using namespace iam_osc_detail;
 	dt *= iam_detail::g_time_scale;
 	osc_state* s = get_osc(id);
@@ -3922,6 +3941,7 @@ ImVec2 iam_oscillate_vec2(ImGuiID id, ImVec2 amplitude, ImVec2 frequency, int wa
 }
 
 ImVec4 iam_oscillate_vec4(ImGuiID id, ImVec4 amplitude, ImVec4 frequency, int wave_type, ImVec4 phase, float dt) {
+	iam_detail::last_seen(iam_detail::g_frame);
 	using namespace iam_osc_detail;
 	dt *= iam_detail::g_time_scale;
 	osc_state* s = get_osc(id);
@@ -3942,6 +3962,7 @@ ImVec4 iam_oscillate_vec4(ImGuiID id, ImVec4 amplitude, ImVec4 frequency, int wa
 }
 
 ImVec4 iam_oscillate_color(ImGuiID id, ImVec4 base_color, ImVec4 amplitude, float frequency, int wave_type, float phase, int color_space, float dt) {
+	iam_detail::last_seen(iam_detail::g_frame);
 	using namespace iam_osc_detail;
 	dt *= iam_detail::g_time_scale;
 	osc_state* s = get_osc(id);
@@ -4046,12 +4067,15 @@ float iam_shake(ImGuiID id, float intensity, float frequency, float decay_time, 
 	dt *= iam_detail::g_time_scale;
 	shake_state* s = get_shake(id);
 
+	if(!s->triggered)
+		return 0.f;
+
 	if (s->last_frame != iam_detail::g_frame) {
 		if (s->triggered) {
 			s->time_since_trigger += dt;
 		}
 		s->noise_time += dt;
-		s->last_frame = iam_detail::g_frame;
+		s->last_frame = iam_detail::last_seen(iam_detail::g_frame);
 	}
 
 	if (!s->triggered || s->time_since_trigger >= decay_time) {
@@ -4150,7 +4174,7 @@ float iam_wiggle(ImGuiID id, float amplitude, float frequency, float dt) {
 
 	if (s->last_frame != iam_detail::g_frame) {
 		s->noise_time += dt;
-		s->last_frame = iam_detail::g_frame;
+		s->last_frame = iam_detail::last_seen(iam_detail::g_frame);
 	}
 
 	// Generate smooth continuous noise
@@ -6195,6 +6219,7 @@ float iam_noise_channel_float(ImGuiID id, float frequency, float amplitude, iam_
 	noise_state* s = get_noise_state(id);
 
 	s->time += dt;
+	s->last_frame = iam_detail::last_seen(iam_detail::g_frame);
 	float noise_val = iam_noise_2d(s->time * frequency, 0.0f, opts);
 	return noise_val * amplitude;
 }
@@ -6204,6 +6229,7 @@ ImVec2 iam_noise_channel_vec2(ImGuiID id, ImVec2 frequency, ImVec2 amplitude, ia
 	noise_state* s = get_noise_state(id);
 
 	s->time += dt;
+	s->last_frame = iam_detail::last_seen(iam_detail::g_frame);
 	float nx = iam_noise_2d(s->time * frequency.x, 0.0f, opts);
 	float ny = iam_noise_2d(s->time * frequency.y, 100.0f, opts); // Offset Y to get different values
 	return ImVec2(nx * amplitude.x, ny * amplitude.y);
@@ -6214,6 +6240,7 @@ ImVec4 iam_noise_channel_vec4(ImGuiID id, ImVec4 frequency, ImVec4 amplitude, ia
 	noise_state* s = get_noise_state(id);
 
 	s->time += dt;
+	s->last_frame = iam_detail::last_seen(iam_detail::g_frame);
 	float nx = iam_noise_2d(s->time * frequency.x, 0.0f, opts);
 	float ny = iam_noise_2d(s->time * frequency.y, 100.0f, opts);
 	float nz = iam_noise_2d(s->time * frequency.z, 200.0f, opts);
@@ -6554,7 +6581,7 @@ iam_gradient iam_tween_gradient(ImGuiID id, ImGuiID channel_id, iam_gradient con
 	dt *= iam_detail::g_time_scale;
 	ImGuiID key = iam_detail::make_key(id, channel_id);
 	gradient_chan* c = g_gradient_pool.GetOrAddByKey(key);
-	c->last_seen_frame = g_gradient_frame;
+	c->last_seen_frame = iam_detail::last_seen(g_gradient_frame);
 
 	// Fast path: sleeping and target unchanged
 	if (c->sleeping && c->target.stop_count() == target.stop_count()) {
@@ -6838,7 +6865,7 @@ iam_transform iam_tween_transform(ImGuiID id, ImGuiID channel_id, iam_transform 
 		c->rotation_mode = rotation_mode;
 		c->sleeping = 1;
 	}
-	c->last_seen_frame = g_transform_frame;
+	c->last_seen_frame = iam_detail::last_seen(g_transform_frame);
 
 	// Fast path: sleeping and target unchanged
 	if (c->sleeping) {
@@ -7593,3 +7620,7 @@ void iam_show_debug_timeline(ImGuiID instance_id) {
 }
 
 #undef IMGUI_STORAGE_PAIR
+
+bool iam_has_active_anims() {
+	return iam_detail::g_last_seen_frame >= iam_detail::g_frame;
+}

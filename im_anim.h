@@ -90,6 +90,7 @@ typedef float (*iam_ease_fn)(float t);
 // ----------------------------------------------------
 
 // Frame management
+bool iam_has_active_anims();                                                        // Check if any tweens are active.
 void iam_update_begin_frame();                                                      // Call once per frame before any tweens.
 void iam_gc(unsigned int max_age_frames = 600);                                     // Remove stale tween entries older than max_age_frames.
 void iam_pool_clear();																	// Manually clean up pools.
