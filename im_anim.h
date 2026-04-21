@@ -186,6 +186,12 @@ ImVec4 iam_tween_vec4(ImGuiID id, ImGuiID channel_id, ImVec4 target, float dur, 
 int    iam_tween_int(ImGuiID id, ImGuiID channel_id, int target, float dur, iam_ease_desc const& ez, int policy, float dt, int init_value = 0);       // Animate an integer value.
 ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float dur, iam_ease_desc const& ez, int policy, int color_space, float dt, ImVec4 init_value = ImVec4(1, 1, 1, 1)); // Animate a color in specified color space.
 
+void iam_tween_remove_float(ImGuiID id, ImGuiID channel_id);
+void iam_tween_remove_vec2(ImGuiID id, ImGuiID channel_id);
+void iam_tween_remove_vec4(ImGuiID id, ImGuiID channel_id);
+void iam_tween_remove_int(ImGuiID id, ImGuiID channel_id);
+void iam_tween_remove_color(ImGuiID id, ImGuiID channel_id);
+
 // Resize-friendly helpers
 ImVec2 iam_anchor_size(int space); // Get dimensions of anchor space (window, viewport, etc.).
 

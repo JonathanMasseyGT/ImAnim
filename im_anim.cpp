@@ -681,6 +681,7 @@ struct pool_t {
 	void begin() { ++frame; }
 	T* get(ImGuiID key) { T* c = pool.GetOrAddByKey(key); c->last_seen_frame = last_seen(frame); return c; }
 	T* try_get(ImGuiID key) { return pool.GetByKey(key); }  // Returns nullptr if not found
+	void remove(ImGuiID key) { T* value = pool.GetByKey(key); if(value) pool.Remove(key, value); }
 	bool exists(ImGuiID key) { return pool.GetByKey(key) != nullptr; }
 	void gc(unsigned max_age) {
 		for (int i = 0; i < pool.GetMapSize(); ++i) {
@@ -1118,6 +1119,36 @@ ImVec4 iam_tween_color(ImGuiID id, ImGuiID channel_id, ImVec4 target_srgb, float
 		else { c->evaluate(); c->set(target_srgb, dur, ez, policy, color_space); }
 	}
 	return c->evaluate();
+}
+
+void iam_tween_remove_float(ImGuiID id, ImGuiID channel_id) {
+	using namespace iam_detail;
+	ImGuiID key = make_key(id, channel_id);
+	g_float.remove(key);
+}
+
+void iam_tween_remove_vec2(ImGuiID id, ImGuiID channel_id) {
+	using namespace iam_detail;
+	ImGuiID key = make_key(id, channel_id);
+	g_vec2.remove(key);
+}
+
+void iam_tween_remove_vec4(ImGuiID id, ImGuiID channel_id) {
+	using namespace iam_detail;
+	ImGuiID key = make_key(id, channel_id);
+	g_vec4.remove(key);
+}
+
+void iam_tween_remove_int(ImGuiID id, ImGuiID channel_id) {
+	using namespace iam_detail;
+	ImGuiID key = make_key(id, channel_id);
+	g_int.remove(key);
+}
+
+void iam_tween_remove_color(ImGuiID id, ImGuiID channel_id) {
+	using namespace iam_detail;
+	ImGuiID key = make_key(id, channel_id);
+	g_color.remove(key);
 }
 
 // ============================================================
