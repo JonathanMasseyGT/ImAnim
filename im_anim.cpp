@@ -4396,6 +4396,8 @@ static void iam_scroll_update_internal(float dt) {
 			window->Scroll.x = new_x;
 			if (t >= 1.0f) sa.active_x = false;
 		}
+
+		iam_detail::last_seen(iam_detail::g_frame);
 	}
 }
 
